@@ -100,14 +100,13 @@ outdres = 1.0 / outres
 
 refinefac = 8
 inres = outres * refinefac
-indres = outdres * refinefac
+indres = 1.0 / inres
 
 # tabulate the error function from -3 to 3 
-erfx = np.arange(-3,3.0001,10/2048.)
-erfy = special.erf(erfx)
-
-def closest_erf_value(xvals, yvals, inval):
-    return yvals[(np.abs(xvals-inval)).argmin()]
+#erfx = np.arange(-3,3.0001,10/512.)
+#erfy = special.erf(erfx)
+#def closest_erf_value(xvals, yvals, inval):
+#    return yvals[(np.abs(xvals-inval)).argmin()]
 
 for j in xrange(200):
     outpty = (j + 0.5) * outdres
@@ -117,7 +116,7 @@ for j in xrange(200):
     jj = 0
     for rj in xrange(refinefac):
         inpty = (j*refinefac + jj + 0.5) * indres
-    
+        print 'inpty: ',inpty
         # get a slice
         slc = ds.h.slice(sliceax, inpty)
     
@@ -143,6 +142,8 @@ for j in xrange(200):
         # weight = dx * rhoC18O
         weight = indres * rhoC18O  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to indres
         # we need to grab rows from the slice differently depending on what axis we're projecting
+        hist = np.zeros(len(binmids))
+        erfvals = np.zeros(len(binvals))
         if axis == 0:
             for i in xrange(inres):
                 hist, binedges = np.histogram(
@@ -156,16 +157,15 @@ for j in xrange(200):
                 # for each point along the slice, march along the projecting dimension
                 # and turn each detection into a gaussian. bin this gaussian into the 
                 # velbins.
-                hist = np.zeros(len(binmids))
+                hist[:] = 0
                 for k in xrange(len(vx[:,i])):
                     peak = vx[k,i]
                     # calculate the cumulative distribution of this line at each velocity bin edge
-                    #cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
-                    erfvals = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
-                    cdfs = 0.5 * (1 + erfvals * weight[k,i])
+                    cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
+                    #erfvals[:] = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
+                    #cdfs = 0.5 * (1 + erfvals * weight[k,i])
                     # subtract adjacent values to get the contribution to each bin
-                    thislinebinned = np.roll(cdfs, -1) - cdfs
-                    hist = hist + thislinebinned[:-1]
+                    hist = hist + np.diff(cdfs)
                 # this next bit handles binning together a refinefac**2 patch into one output cell
                 # jj==0 handles glomming together the direction perpindicular to the slices
                 # i//refinefac ==0 handles glomming to gether along the slice
