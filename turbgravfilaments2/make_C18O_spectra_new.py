@@ -153,47 +153,76 @@ for j in xrange(200):
                     weights = weight[i,:])
                 thesehists.append(hist)
         if axis > 0:
-            for i in xrange(inres):
+            i = 0
+            for ii in xrange(inres):
                 # for each point along the slice, march along the projecting dimension
                 # and turn each detection into a gaussian. bin this gaussian into the 
                 # velbins.
                 hist[:] = 0
-                for k in xrange(len(vx[:,i])):
+                k = 0
+                dkmin = 1
+                for ik in xrange(len(vx[:,i])):
                     peak = vx[k,i]
+                    thisdx = dx[k,i]
+                    dkmin = min(dkmin, thisdx)
+                    if(thisdx == outdres): # this cell is unrefined
+                        kincr = refinefac
+                    elif(thisdx == outdres / 2):
+                        kincr = int(refinefac / 2)
+                    elif(thisdx == outdres / 4):
+                        kincr = int(refinefac / 4)
+                    else:
+                        kincr = 1
                     # calculate the cumulative distribution of this line at each velocity bin edge
-                    cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
+                    cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i] * kincr
                     #erfvals[:] = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
                     #cdfs = 0.5 * (1 + erfvals * weight[k,i])
                     # subtract adjacent values to get the contribution to each bin
                     hist = hist + np.diff(cdfs)
+                    k += kincr
+                    if(k == len(vx[:,i])):
+                        break
+                if(dkmin == outdres):
+                    iincr = refinefac
+                elif(dkmin == outdres / 2):
+                    iincr = int(refinefac / 2)
+                elif(dkmin == outdres / 4):
+                    iincr = int(refinefac / 4)
+                else:
+                    iincr = 1
                 # this next bit handles binning together a refinefac**2 patch into one output cell
                 # jj==0 handles glomming together the direction perpindicular to the slices
                 # i//refinefac ==0 handles glomming to gether along the slice
                 #print jj, i//refinefac, jj==0,i//refinefac==0
                 if(jj == 0 and i%refinefac == 0):    
-                    thesehists.append(hist)
+                    thesehists.append(hist * iincr)
                 else:
-                    thesehists[i//refinefac] += hist  
-        # figure out if we can skip reading some of these slices
-        if(mindx == outdres): # there are no refined cells in this slice
-            thesehists *= refinefac # all the subslices are going to be the same
-            jincr = refinefac
-        elif (mindx == outdres / 2): # there is only one level of refinement in this slice
-            thesehists *= refinefac/2 # the first refinefac/2 subsclices are going to be the same
-            jincr = refinefac / 2
-        elif (mindx == outdres / 4): # there are two levels of refinement in this slice
-            thesehists *= refinefac / 4 # the first refinefac/4 subsclices are going to be the same
-            jincr = refinefac / 4
-        else:
-            jincr = 1
-        if(jj == 0):
-            thesehistsaccum = copy.deepcopy(thesehists)
-        else:
-            thesehistsaccum += thesehists
-        print 'incrimenting jincr by ',jincr
-        jj += jincr
-        if(jj == refinefac):
-            break;
+                    thesehists[i//refinefac] += hist * iincr
+                print 'incrimenting i by ',iincr
+                i += iincr
+                if(i == inres):
+                    break
+            # figure out if we can skip reading some of these slices
+            if(mindx == outdres): # there are no refined cells in this slice
+                # all the subslices are going to be the same
+                jincr = refinefac
+            elif (mindx == outdres / 2): # there is only one level of refinement in this slice
+                # the first refinefac/2 subsclices are going to be the same
+                jincr = int(refinefac / 2)
+            elif (mindx == outdres / 4): # there are two levels of refinement in this slice
+                # the first refinefac/4 subsclices are going to be the same
+                jincr = int(refinefac / 4)
+            else:
+                jincr = 1
+            thesehists *= jincr
+            if(jj == 0):
+                thesehistsaccum = copy.deepcopy(thesehists)
+            else:
+                thesehistsaccum += thesehists
+            print 'incrimenting j by ',jincr
+            jj += jincr
+            if(jj == refinefac):
+                break;
             
     # once we have the histograms of mass-weighted velocity along each point for this
     # row, save it to an hdf5 file
