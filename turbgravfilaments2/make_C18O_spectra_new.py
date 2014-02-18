@@ -8,6 +8,7 @@ import matplotlib.font_manager as fm
 import gc
 import sys
 import h5py
+import copy
 import shutil
 from astropy.io import ascii
 from os.path import expanduser
@@ -38,7 +39,7 @@ def _N2Hplus(field, data):
     antiselection = (data['Density'] < lolim)
     newfield[antiselection] = 0.0
     return newfield  
-
+    
 
 snap = int(sys.argv[1])
 axis = int(sys.argv[2])
@@ -101,13 +102,20 @@ refinefac = 8
 inres = outres * refinefac
 indres = outdres * refinefac
 
+# tabulate the error function from -3 to 3 
+erfx = np.arange(-3,3.0001,10/2048.)
+erfy = special.erf(erfx)
+
+def closest_erf_value(xvals, yvals, inval):
+    return yvals[(np.abs(xvals-inval)).argmin()]
+
 for j in xrange(200):
     outpty = (j + 0.5) * outdres
     thesehists = []
     print j, outpty
     
-    for jj in xrange(refinefac):
-        print ' ',jj,jj//refinefac
+    jj = 0
+    for rj in xrange(refinefac):
         inpty = (j*refinefac + jj + 0.5) * indres
     
         # get a slice
@@ -129,9 +137,11 @@ for j in xrange(200):
     
         x = np.array(frb[los])
         vx = np.array(frb[vlos])
-        # dx = np.array(frb[dlos])
+        dx = np.array(frb[dlos])
+        mindx = np.min(dx)
+        print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
         # weight = dx * rhoC18O
-        weight = dinres * rhoC180  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to dinres
+        weight = indres * rhoC18O  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to indres
         # we need to grab rows from the slice differently depending on what axis we're projecting
         if axis == 0:
             for i in xrange(inres):
@@ -150,24 +160,47 @@ for j in xrange(200):
                 for k in xrange(len(vx[:,i])):
                     peak = vx[k,i]
                     # calculate the cumulative distribution of this line at each velocity bin edge
-                    cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
+                    #cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
+                    erfvals = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
+                    cdfs = 0.5 * (1 + erfvals * weight[k,i])
                     # subtract adjacent values to get the contribution to each bin
                     thislinebinned = np.roll(cdfs, -1) - cdfs
                     hist = hist + thislinebinned[:-1]
                 # this next bit handles binning together a refinefac**2 patch into one output cell
                 # jj==0 handles glomming together the direction perpindicular to the slices
-                # k//refinefac ==0 handles glomming to gether along the slice
-                if(jj == 0 and k//refinefac == 0):    
+                # i//refinefac ==0 handles glomming to gether along the slice
+                #print jj, i//refinefac, jj==0,i//refinefac==0
+                if(jj == 0 and i%refinefac == 0):    
                     thesehists.append(hist)
                 else:
-                    thesehists[k//refinefac] += hist             
-
+                    thesehists[i//refinefac] += hist  
+        # figure out if we can skip reading some of these slices
+        if(mindx == outdres): # there are no refined cells in this slice
+            thesehists *= refinefac # all the subslices are going to be the same
+            jincr = refinefac
+        elif (mindx == outdres / 2): # there is only one level of refinement in this slice
+            thesehists *= refinefac/2 # the first refinefac/2 subsclices are going to be the same
+            jincr = refinefac / 2
+        elif (mindx == outdres / 4): # there are two levels of refinement in this slice
+            thesehists *= refinefac / 4 # the first refinefac/4 subsclices are going to be the same
+            jincr = refinefac / 4
+        else:
+            jincr = 1
+        if(jj == 0):
+            thesehistsaccum = copy.deepcopy(thesehists)
+        else:
+            thesehistsaccum += thesehists
+        print 'incrimenting jincr by ',jincr
+        jj += jincr
+        if(jj == refinefac):
+            break;
+            
     # once we have the histograms of mass-weighted velocity along each point for this
     # row, save it to an hdf5 file
     f = h5py.File(specdir+'spectra_C18O_'+str(j).zfill(4)+'.hdf5', 'w')
-    dset = f.create_dataset('spectraC18O', data = thesehists, dtype='float32')
+    dset = f.create_dataset('spectraC18O', data = thesehistsaccum, dtype='float32')
     dset.attrs['slowindex'] = j
-    dset.attrs[sliceax] = pty
+    dset.attrs[sliceax] = outpty
     f.close()
     
     del(slc)
@@ -181,6 +214,7 @@ for j in xrange(200):
     del(weight)
     del(hist)
     del(thesehists)
+    del(thesehistsaccum)
     gc.collect()
     
     
