@@ -107,6 +107,7 @@ for j in xrange(200):
     print j, outpty
     
     for jj in xrange(refinefac):
+        print ' ',jj,jj//refinefac
         inpty = (j*refinefac + jj + 0.5) * indres
     
         # get a slice
@@ -153,9 +154,9 @@ for j in xrange(200):
                     # subtract adjacent values to get the contribution to each bin
                     thislinebinned = np.roll(cdfs, -1) - cdfs
                     hist = hist + thislinebinned[:-1]
-                // this next bit handles binning together a refinefac**2 patch into one output cell
-                // jj==0 handles glomming together the direction perpindicular to the slices
-                // k//refinefac ==0 handles glomming to gether along the slice
+                # this next bit handles binning together a refinefac**2 patch into one output cell
+                # jj==0 handles glomming together the direction perpindicular to the slices
+                # k//refinefac ==0 handles glomming to gether along the slice
                 if(jj == 0 and k//refinefac == 0):    
                     thesehists.append(hist)
                 else:
