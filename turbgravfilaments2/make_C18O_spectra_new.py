@@ -95,7 +95,7 @@ f.close()
     inres: the resolution we sample the grid at.
 """
 outres = 2**lmin
-outdres = 1.0 / res
+outdres = 1.0 / outres
 
 refinefac = 8
 inres = outres * refinefac
@@ -134,7 +134,7 @@ for j in xrange(200):
         weight = dinres * rhoC180  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to dinres
         # we need to grab rows from the slice differently depending on what axis we're projecting
         if axis == 0:
-            for i in xrange(res):
+            for i in xrange(inres):
                 hist, binedges = np.histogram(
                     vx[i,:],
                     range = (vmin, vmax),
