@@ -198,7 +198,7 @@ for j in xrange(200):
                     thesehists.append(hist * iincr)
                 else:
                     thesehists[i//refinefac] += hist * iincr
-                print 'incrimenting i by ',iincr
+               # print 'incrimenting i by ',iincr
                 i += iincr
                 if(i == inres):
                     break
@@ -219,7 +219,7 @@ for j in xrange(200):
                 thesehistsaccum = copy.deepcopy(thesehists)
             else:
                 thesehistsaccum += thesehists
-            print 'incrimenting j by ',jincr
+            #print 'incrimenting j by ',jincr
             jj += jincr
             if(jj == refinefac):
                 break;
