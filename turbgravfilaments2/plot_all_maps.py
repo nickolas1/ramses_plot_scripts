@@ -244,7 +244,8 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
                 os.makedirs(framesdir)
             framename = framesdir+'C18O_'+str(i)+'_frame_'+str(snap).zfill(5)+'.png'
             plt.savefig(framename, dpi = 128, transparent = True)
-        
+            plt.close()
+            
             """
                xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
                contours of NH2Plus
@@ -271,7 +272,7 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
             
             framename = framesdir+'N2Hplus_'+str(i)+'_frame_'+str(snap).zfill(5)+'.png'
             plt.savefig(framename, dpi = 128, transparent = True)
-            
+            plt.close()
             
             """
                xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -303,6 +304,7 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
             fN2Hplus.close()
             fSD.close()
             plt.close() 
+            del(fig)
             del(fC18O)
             del(fN2Hplus)
             del(sdC18O)

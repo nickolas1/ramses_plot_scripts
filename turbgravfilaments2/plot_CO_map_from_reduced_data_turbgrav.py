@@ -43,7 +43,7 @@ lfm = fm.FontProperties( # label font main
 rcParams['xtick.direction'] = 'out'
 
 outdir = get_output_path(homedir)
-outdir = './'
+#outdir = './'
 
 snapstr = str(int(sys.argv[1])).zfill(5)
 infoname = 'reduced_'+snapstr+'/info_'+snapstr+'.txt'
@@ -80,11 +80,11 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
     PlotScaleBar = False
     
     for i in xrange(1):
-        file = fileprefix+'surface_density_CO'+str(i)+'.hdf5'
+        file = fileprefix+'surface_density_C18O'+str(i)+'.hdf5'
         if os.path.exists(file):
             print snap,file
             f = h5py.File(file, 'r')
-            sd = f['surface_density_CO']
+            sd = f['surface_density_C18O']
             # convert to linear units, divide by mu * mH
             sd = 10**np.array(sd) / (mu * const.m_p.cgs.value)
             # there are a lot of very small values- cull them before getting some
