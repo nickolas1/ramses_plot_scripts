@@ -68,6 +68,8 @@ outspecs = np.array([[np.zeros(len(vels)) for x in xrange(outres)] for y in xran
 totnonzero = 0
 for inj in xrange(inres):
     specfile = fileprefix+'posvel_'+str(axis)+'/spectra_C18O_'+str(inj).zfill(4)+'.hdf5'
+   #if(not os.path.isfile(specfile)):
+    #    specfile = "../turbgrav1024m8/reduced_00018/"+'posvel_'+str(axis)+'/spectra_C18O_'+str(inj).zfill(4)+'.hdf5'
     f = h5py.File(specfile)
     specs = f['spectraC18O']
     print specfile
@@ -95,7 +97,7 @@ print np.mean(outspecs),' ',np.median(outspecs),' ',np.max(outspecs)
 """
 
 # new strategy: make the highest value = 512, divide by that and round.
-# highest density for snapshot_00018 in C18O is 6.43825472928e-21
+# highest density for snapshot_00018 in C18O is 1.55814587039e-18
 outspecs /= np.max(outspecs)
 outspecs *= 512
 # if doing this, int the rounded values in the write section below

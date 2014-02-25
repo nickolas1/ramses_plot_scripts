@@ -97,8 +97,8 @@ print np.mean(outspecs),' ',np.median(outspecs),' ',np.max(outspecs)
 """
 
 # new strategy: make the highest value = 512, divide by that and round.
-# highest density for snapshot_00018 in C18O is 6.43825472928e-21
-outspecs /= 6.43825472928e-21
+# highest density for snapshot_00018 in C18O is 1.55814587039e-18
+outspecs /= 1.55814587039e-18
 outspecs *= 512
 # if doing this, int the rounded values in the write section below
 outspecs = np.round(outspecs,0)
