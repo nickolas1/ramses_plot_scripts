@@ -45,13 +45,10 @@ mu = 2.33
 #axis = int(sys.argv[2])
 
 snap = 18
-axis = 2
+axis = 1
 
 fileprefix = 'reduced_'+str(snap).zfill(5)+'/'
 
-f = h5py.File(fileprefix+'posvel_'+str(axis)+'/spectrumvels.hdf5')
-vels = np.array(f['binmidskms'])
-f.close()
 
 # make the surface density fits files
 fileCO = fileprefix+'surface_density_C18O2.hdf5'
