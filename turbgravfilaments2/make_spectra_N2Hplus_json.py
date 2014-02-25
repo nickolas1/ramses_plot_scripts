@@ -14,6 +14,7 @@ from astropy.io import ascii
 from astropy import constants as const
 from astropy import units as u
 from os.path import expanduser
+import os.path
 from scipy import special
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -68,15 +69,16 @@ outspecs = np.array([[np.zeros(len(vels)) for x in xrange(outres)] for y in xran
 totnonzero = 0
 for inj in xrange(inres):
     specfile = fileprefix+'posvel_'+str(axis)+'/spectra_N2Hplus_'+str(inj).zfill(4)+'.hdf5'
-    f = h5py.File(specfile)
-    specs = f['spectraN2Hplus']
-    print specfile
-    outj = inj//stride
-    for ini in xrange(inres):
-        outi = ini//stride
-        outspecs[outi,outj] += specs[ini]
-        totnonzero += len(specs[ini][specs[ini]>0])
-    f.close()
+    if os.path.isfile(specfile):
+        f = h5py.File(specfile, 'r')
+        specs = f['spectraN2Hplus']
+        print specfile
+        outj = inj//stride
+        for ini in xrange(inres):
+            outi = ini//stride
+            outspecs[outi,outj] += specs[ini]
+            totnonzero += len(specs[ini][specs[ini]>0])
+        f.close()
 meannonzero = outspecs.sum() / totnonzero
 #outspecs /= meannonzero
 nonzero = outspecs[outspecs > 0]
