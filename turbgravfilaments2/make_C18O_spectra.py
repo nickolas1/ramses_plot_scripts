@@ -121,7 +121,7 @@ for j in xrange(200):
     x = np.array(frb[los])
     dx = np.array(frb[dlos])
     vx = np.array(frb[vlos])
-    weight = rhoC18O
+    weight = rhoC18O * dres
     # we need to grab rows from the slice differently depending on what axis we're projecting
     if axis == 0:
         for i in xrange(res):
