@@ -108,14 +108,14 @@ indres = 1.0 / inres
 #def closest_erf_value(xvals, yvals, inval):
 #    return yvals[(np.abs(xvals-inval)).argmin()]
 
-for j in xrange(200):
-    outpty = (j + 0.5) * outdres
+for sj in xrange(200):
+    outpty = (sj + 0.5) * outdres
     thesehists = []
-    print j, outpty
+    print sj, outpty
     
-    jj = 0
-    for rj in xrange(refinefac):
-        inpty = (j*refinefac + jj + 0.5) * indres
+    j = 0
+    for ij in xrange(refinefac):
+        inpty = (j*refinefac + j + 0.5) * indres
         print 'inpty: ',inpty
         # get a slice
         slc = ds.h.slice(sliceax, inpty)
@@ -192,9 +192,9 @@ for j in xrange(200):
                 else:
                     iincr = 1
                 # this next bit handles binning together a refinefac**2 patch into one output cell
-                # jj==0 handles glomming together the direction perpindicular to the slices
+                # j==0 handles glomming together the direction perpindicular to the slices
                 # i//refinefac ==0 handles glomming to gether along the slice
-                if(jj == 0 and i%refinefac == 0):    
+                if(j == 0 and i%refinefac == 0):    
                     thesehists.append(hist * iincr)
                 else:
                     thesehists[i//refinefac] += hist * iincr
@@ -214,20 +214,20 @@ for j in xrange(200):
                 jincr = int(refinefac / 4)
             else:
                 jincr = 1
-            if(jj == 0):
+            if(j == 0):
                 thesehistsaccum = np.array(thesehists) * jincr
             else:
                 thesehistsaccum += np.array(thesehists) * jincr
-            #print 'incrimenting j by ',jincr
-            jj += jincr
-            if(jj == refinefac):
+            #print 'incrementing j by ',jincr
+            j += jincr
+            if(j == refinefac):
                 break;
                 
     # once we have the histograms of mass-weighted velocity along each point for this
     # row, save it to an hdf5 file
     f = h5py.File(specdir+'spectra_C18O_'+str(j).zfill(4)+'.hdf5', 'w')
     dset = f.create_dataset('spectraC18O', data = thesehistsaccum, dtype='float32')
-    dset.attrs['slowindex'] = j
+    dset.attrs['slowindex'] = sj
     dset.attrs[sliceax] = outpty
     f.close()
     

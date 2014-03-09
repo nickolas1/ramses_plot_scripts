@@ -121,7 +121,7 @@ for j in xrange(200):
     x = np.array(frb[los])
     dx = np.array(frb[dlos])
     vx = np.array(frb[vlos])
-    weight = dx * rhoC18O
+    weight = rhoC18O
     # we need to grab rows from the slice differently depending on what axis we're projecting
     if axis == 0:
         for i in xrange(res):
@@ -142,8 +142,7 @@ for j in xrange(200):
                 # calculate the cumulative distribution of this line at each velocity bin edge
                 cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i]
                 # subtract adjacent values to get the contribution to each bin
-                thislinebinned = np.roll(cdfs, -1) - cdfs
-                hist = hist + thislinebinned[:-1]
+                hist = hist + np.diff(cdfs)
             thesehists.append(hist)             
 
     # once we have the histograms of mass-weighted velocity along each point for this
