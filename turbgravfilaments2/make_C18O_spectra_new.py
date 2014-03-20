@@ -44,6 +44,27 @@ def _N2Hplus(field, data):
 snap = int(sys.argv[1])
 axis = int(sys.argv[2])
 
+
+"""
+    read in the surface density map. we will use this to normalize the spectra
+    so that they are in approximately physical units
+    
+    convert surface density to integrated line intensity using
+    David S. Meier and Jean L. Turner ApJ 551:687 2001 equation 2
+
+    N(H2)C18O = 2.42e14 cm^-2 [H2]/[C18O] * exp(5.27/Tex)/(exp(5.27/Tex)-1) IC18O K km/s
+    [H2]/[C18O] = 2.94e6
+"""
+file = 'reduced_'+str(snap).zfill(5)+'/surface_density_C18O2.hdf5'
+f = h5py.File(file, 'r')
+sd = f['surface_density_C18O']
+sd = 10**np.array(sd)  # convert to linear units
+sd /= (2.33 * 1.672621777e-24) # convert to number density
+sd /= (2.42e14 * 2.94e6) # non-temperature factors of IC18O conversion
+sd /= (np.exp(5.27/10) / (np.exp(5.27/10) - 1)) # temperature part
+f.close()
+
+
 if axis == 0:
     los = 'x'
     dlos = 'dx'
@@ -98,24 +119,18 @@ f.close()
 outres = 2**lmin
 outdres = 1.0 / outres
 
-refinefac = 8
+refinefac = 2**(lmax - lmin)
 inres = outres * refinefac
 indres = 1.0 / inres
 
-# tabulate the error function from -3 to 3 
-#erfx = np.arange(-3,3.0001,10/512.)
-#erfy = special.erf(erfx)
-#def closest_erf_value(xvals, yvals, inval):
-#    return yvals[(np.abs(xvals-inval)).argmin()]
-
-for j in xrange(200):
-    outpty = (j + 0.5) * outdres
+for sj in xrange(200):
+    outpty = (sj + 0.5) * outdres
     thesehists = []
-    print j, outpty
+    print sj, outpty
     
-    jj = 0
-    for rj in xrange(refinefac):
-        inpty = (j*refinefac + jj + 0.5) * indres
+    j = 0
+    for ij in xrange(refinefac):
+        inpty = (sj*refinefac + j + 0.5) * indres
         print 'inpty: ',inpty
         # get a slice
         slc = ds.h.slice(sliceax, inpty)
@@ -139,11 +154,10 @@ for j in xrange(200):
         dx = np.array(frb[dlos])
         mindx = np.min(dx)
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
-        # weight = dx * rhoC18O
-        weight = indres * rhoC18O  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to indres
+        print 'max(rho), min(rho), outdres: ',np.max(rhoC18O),np.min(rhoC18O),outdres
+        weight = rhoC18O  
         # we need to grab rows from the slice differently depending on what axis we're projecting
         hist = np.zeros(len(binmids))
-        erfvals = np.zeros(len(binvals))
         if axis == 0:
             for i in xrange(inres):
                 hist, binedges = np.histogram(
@@ -161,27 +175,32 @@ for j in xrange(200):
                 hist[:] = 0
                 k = 0
                 dkmin = 1
-                if(weight[:,i].sum() >= 0):
-                    for ik in xrange(len(vx[:,i])):
-                        peak = vx[k,i]
-                        thisdx = dx[k,i]
-                        dkmin = min(dkmin, thisdx)
-                        if(thisdx == outdres): # this cell is unrefined
-                            kincr = refinefac
-                        elif(thisdx == outdres / 2):
-                            kincr = int(refinefac / 2)
-                        elif(thisdx == outdres / 4):
-                            kincr = int(refinefac / 4)
-                        else:
-                            kincr = 1
-                        # calculate the cumulative distribution of this line at each velocity bin edge
-                        cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i] * kincr
-                        #erfvals[:] = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
-                        #cdfs = 0.5 * (1 + erfvals * weight[k,i])
-                        # subtract adjacent values to get the contribution to each bin
-                        hist = hist + np.diff(cdfs)
+            
+                if(weight[:,ii].sum() > 0):
+                    print 'whaoooooooo ',i, i//refinefac,weight[:,ii].sum()
+                    for ik in xrange(len(vx[:,ii])):
+                        kincr = 1
+                        if weight[ik,ii] > 0:
+                            peak = vx[ik,ii]
+                            thisdx = dx[ik,ii]
+                            dkmin = min(dkmin, thisdx)
+                            if(thisdx == outdres): # this cell is unrefined
+                                kincr = refinefac
+                            elif(thisdx == outdres / 2):
+                                kincr = int(refinefac / 2)
+                            elif(thisdx == outdres / 4):
+                                kincr = int(refinefac / 4)
+                            elif(thisdx == outdres / 8):
+                                kincr = int(refinefac / 8)
+                            else:
+                                kincr = 1
+                            # calculate the cumulative distribution of this line at each velocity bin edge
+                            cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[ik,ii] * kincr
+                            # subtract adjacent values to get the contribution to each bin
+                            hist = hist + np.diff(cdfs)
+                          #  print 'hist ',hist
                         k += kincr
-                        if(k == len(vx[:,i])):
+                        if(k == len(vx[:,ii])):
                             break
                 if(dkmin == outdres):
                     iincr = refinefac
@@ -189,12 +208,14 @@ for j in xrange(200):
                     iincr = int(refinefac / 2)
                 elif(dkmin == outdres / 4):
                     iincr = int(refinefac / 4)
+                elif(dkmin == outdres / 8):
+                    iincr = int(refinefac / 8)
                 else:
                     iincr = 1
                 # this next bit handles binning together a refinefac**2 patch into one output cell
-                # jj==0 handles glomming together the direction perpindicular to the slices
-                # i//refinefac ==0 handles glomming to gether along the slice
-                if(jj == 0 and i%refinefac == 0):    
+                # j==0 handles glomming together the direction perpindicular to the slices
+                # ii//refinefac == 0 handles glomming to gether along the slice
+                if(j == 0 and i%refinefac == 0):    
                     thesehists.append(hist * iincr)
                 else:
                     thesehists[i//refinefac] += hist * iincr
@@ -212,22 +233,31 @@ for j in xrange(200):
             elif (mindx == outdres / 4): # there are two levels of refinement in this slice
                 # the first refinefac/4 subsclices are going to be the same
                 jincr = int(refinefac / 4)
+            elif (mindx == outdres / 8): # there are two levels of refinement in this slice
+                # the first refinefac/4 subsclices are going to be the same
+                jincr = int(refinefac / 8)
             else:
                 jincr = 1
-            if(jj == 0):
+            if(j == 0):
                 thesehistsaccum = np.array(thesehists) * jincr
             else:
                 thesehistsaccum += np.array(thesehists) * jincr
-            #print 'incrimenting j by ',jincr
-            jj += jincr
-            if(jj == refinefac):
+            #print 'incrementing j by ',jincr
+            j += jincr
+            if(j == refinefac):
                 break;
+   # print thesehistsaccum[71]
+   # print thesehistsaccum.shape
+    # normalize to put into K
+    normalisations = sd[sj, :] / thesehistsaccum.sum(axis = 1)
+    thesehistsaccum *= normalisations[:, np.newaxis]
+    thesehistsaccum = np.nan_to_num(thesehistsaccum)
                 
     # once we have the histograms of mass-weighted velocity along each point for this
     # row, save it to an hdf5 file
-    f = h5py.File(specdir+'spectra_C18O_'+str(j).zfill(4)+'.hdf5', 'w')
+    f = h5py.File(specdir+'spectra_C18O_'+str(sj).zfill(4)+'.hdf5', 'w')
     dset = f.create_dataset('spectraC18O', data = thesehistsaccum, dtype='float32')
-    dset.attrs['slowindex'] = j
+    dset.attrs['slowindex'] = sj
     dset.attrs[sliceax] = outpty
     f.close()
     
