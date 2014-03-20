@@ -120,9 +120,9 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
         del(dset)
         gc.collect()  
         
-        ad = ds.h.all_data()
        
     if MakeDensityPDF: 
+        ad = ds.h.all_data()
         nbins = 128
         dmin = 1.e-27
         dmax = 1.e-17

@@ -177,7 +177,7 @@ for sj in xrange(200):
                 dkmin = 1
             
                 if(weight[:,ii].sum() > 0):
-                    print 'whaoooooooo ',i, i//refinefac,weight[:,ii].sum()
+                   # print 'whaoooooooo ',i, i//refinefac,weight[:,ii].sum()
                     for ik in xrange(len(vx[:,ii])):
                         kincr = 1
                         if weight[ik,ii] > 0:
