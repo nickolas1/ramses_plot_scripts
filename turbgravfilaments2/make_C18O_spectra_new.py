@@ -125,11 +125,12 @@ indres = 1.0 / inres
 
 for sj in xrange(200):
     outpty = (sj + 0.5) * outdres
-    thesehists = []
+    thesehistsaccum = np.zeros([outres, len(binmids)])
     print sj, outpty
     
     j = 0
     for ij in xrange(refinefac):
+        thesehists = np.zeros([outres, len(binmids)])
         inpty = (sj*refinefac + j + 0.5) * indres
         print 'inpty: ',inpty
         # get a slice
@@ -156,99 +157,58 @@ for sj in xrange(200):
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
         print 'max(rho), min(rho), outdres: ',np.max(rhoC18O),np.min(rhoC18O),outdres
         weight = rhoC18O  
-        # we need to grab rows from the slice differently depending on what axis we're projecting
-        hist = np.zeros(len(binmids))
-        if axis == 0:
-            for i in xrange(inres):
-                hist, binedges = np.histogram(
-                    vx[i,:],
-                    range = (vmin, vmax),
-                    bins = binvals,
-                    weights = weight[i,:])
-                thesehists.append(hist)
-        if axis > 0:
-            i = 0
-            for ii in xrange(inres):
-                # for each point along the slice, march along the projecting dimension
-                # and turn each detection into a gaussian. bin this gaussian into the 
-                # velbins.
-                hist[:] = 0
-                k = 0
-                dkmin = 1
+
+        i = 0
+        for ii in xrange(inres):
+            # for each point along the slice, march along the projecting dimension
+            # and turn each detection into a gaussian. bin this gaussian into the 
+            # velbins.
+            hist = np.zeros(len(binmids))
+            k = 0
+            dkmin = np.min(dx[:,i])
             
-                if(weight[:,ii].sum() > 0):
-                   # print 'whaoooooooo ',i, i//refinefac,weight[:,ii].sum()
-                    for ik in xrange(len(vx[:,ii])):
-                        kincr = 1
-                        if weight[ik,ii] > 0:
-                            peak = vx[ik,ii]
-                            thisdx = dx[ik,ii]
-                            dkmin = min(dkmin, thisdx)
-                            if(thisdx == outdres): # this cell is unrefined
-                                kincr = refinefac
-                            elif(thisdx == outdres / 2):
-                                kincr = int(refinefac / 2)
-                            elif(thisdx == outdres / 4):
-                                kincr = int(refinefac / 4)
-                            elif(thisdx == outdres / 8):
-                                kincr = int(refinefac / 8)
-                            else:
-                                kincr = 1
-                            # calculate the cumulative distribution of this line at each velocity bin edge
-                            cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[ik,ii] * kincr
-                            # subtract adjacent values to get the contribution to each bin
-                            hist = hist + np.diff(cdfs)
-                          #  print 'hist ',hist
-                        k += kincr
-                        if(k == len(vx[:,ii])):
-                            break
-                if(dkmin == outdres):
-                    iincr = refinefac
-                elif(dkmin == outdres / 2):
-                    iincr = int(refinefac / 2)
-                elif(dkmin == outdres / 4):
-                    iincr = int(refinefac / 4)
-                elif(dkmin == outdres / 8):
-                    iincr = int(refinefac / 8)
-                else:
-                    iincr = 1
-                # this next bit handles binning together a refinefac**2 patch into one output cell
-                # j==0 handles glomming together the direction perpindicular to the slices
-                # ii//refinefac == 0 handles glomming to gether along the slice
-                if(j == 0 and i%refinefac == 0):    
-                    thesehists.append(hist * iincr)
-                else:
-                    thesehists[i//refinefac] += hist * iincr
-               # print 'incrimenting i by ',iincr
-                i += iincr
-                if(i == inres):
-                    break
-            # figure out if we can skip reading some of these slices
-            if(mindx == outdres): # there are no refined cells in this slice
-                # all the subslices are going to be the same
-                jincr = refinefac
-            elif (mindx == outdres / 2): # there is only one level of refinement in this slice
-                # the first refinefac/2 subsclices are going to be the same
-                jincr = int(refinefac / 2)
-            elif (mindx == outdres / 4): # there are two levels of refinement in this slice
-                # the first refinefac/4 subsclices are going to be the same
-                jincr = int(refinefac / 4)
-            elif (mindx == outdres / 8): # there are two levels of refinement in this slice
-                # the first refinefac/4 subsclices are going to be the same
-                jincr = int(refinefac / 8)
-            else:
-                jincr = 1
-            if(j == 0):
-                thesehistsaccum = np.array(thesehists) * jincr
-            else:
-                thesehistsaccum += np.array(thesehists) * jincr
-            #print 'incrementing j by ',jincr
-            j += jincr
-            if(j == refinefac):
-                break;
+            if(weight[:,i].sum() > 0):
+             #   print 'whaoooooooo ',i, i//refinefac,weight[:,i].sum()
+                for ik in xrange(len(vx[:,i])):
+                    kincr = 1
+                    if weight[ik,i] > 0:
+                        peak = vx[ik,i]
+                        thisdx = dx[ik,i]
+                        kincr = int(thisdx / indres)
+                        # calculate the cumulative distribution of this line at each velocity bin edge
+                        cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[ik,i] * kincr
+                        # subtract adjacent values to get the contribution to each bin
+                        hist = hist + np.diff(cdfs)
+                      #  print 'hist ',hist
+                    k += kincr
+                    if(k == len(vx[:,i])):
+                        break
+                        
+            iincr = int(dkmin / indres)
+            # this next bit handles binning together a refinefac**2 patch into one output cell
+            # ii//refinefac == 0 handles glomming to gether along the slice
+            thesehists[i//refinefac] += hist * iincr
+           # print 'incrimenting i by ',iincr
+           # print i, i//refinefac,dkmin / indres,inres
+            i += iincr
+            if(i == inres):
+                break
+                
+        jincr = int(mindx / indres)
+        thesehistsaccum += thesehists * jincr
+        #print 'incrementing j by ',jincr
+        j += jincr
+        if(j == refinefac):
+            break
+            
    # print thesehistsaccum[71]
    # print thesehistsaccum.shape
     # normalize to put into K
+    foo = thesehistsaccum.sum(axis = 1)
+    for ifoo in xrange(outres):
+      #  print foo[ifoo], sd[sj, ifoo]
+        if foo[ifoo] == 0 and sd[sj, ifoo] > 0:
+            print 'trouble! ',ifoo, foo[ifoo], sd[sj, ifoo]
     normalisations = sd[sj, :] / thesehistsaccum.sum(axis = 1)
     thesehistsaccum *= normalisations[:, np.newaxis]
     thesehistsaccum = np.nan_to_num(thesehistsaccum)
