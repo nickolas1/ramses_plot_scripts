@@ -107,7 +107,7 @@ binmids = binmids[:len(binmids) - 1]
 binmidskms = binmids / 1.e5
     
 # save the velocities to a file
-f = h5py.File(specdir+'spectrumvels.hdf5', 'w')
+f = h5py.File(specdir+'spectrumvelsC18O.hdf5', 'w')
 dset = f.create_dataset('binmidskms', data = binmidskms, dtype='float32')
 f.close()
 
@@ -132,6 +132,10 @@ for sj in xrange(200):
     thesehistsaccum = np.zeros([outres, len(binmids)])
     print sj, outpty
     
+    if(sd[sj,:].sum() == 0):
+        print 'skipping ',sj
+        continue
+    
     j = 0
     for ij in xrange(refinefac):
         thesehists = np.zeros([outres, len(binmids)])
@@ -147,20 +151,14 @@ for sj in xrange(200):
             center = [0.5, 0.5, 0.5],   # centered in the box
             height = (1.0, 'unitary'))  # get the whole extent of the box
     
-        rhoC18O = np.array(frb['C18O'])
-       # rhoN2Hplus = np.array(frb['N2Hplus'])
-        sigmaC18O = 0.0526 # thermal width of C18O line in km/s
-    
-        sigma = sigmaC18O * 1.e5 # convert to cm/s
-        erfdenom = np.sqrt(2*sigma**2)
+        weight = np.array(frb['C18O'])
     
         x = np.array(frb[los])
         vx = np.array(frb[vlos])
         dx = np.array(frb[dlos])
         mindx = np.min(dx)
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
-        print 'max(rho), min(rho), outdres: ',np.max(rhoC18O),np.min(rhoC18O),outdres
-        weight = rhoC18O  
+        print 'max(rho), min(rho), outdres: ',np.max(weight),np.min(weight),outdres  
 
         i = 0
         for ii in xrange(inres):
@@ -204,9 +202,7 @@ for sj in xrange(200):
         j += jincr
         if(j == refinefac):
             break
-            
-   # print thesehistsaccum[71]
-   # print thesehistsaccum.shape
+
     # normalize to put into K
     foo = thesehistsaccum.sum(axis = 1)
     for ifoo in xrange(outres):
@@ -232,7 +228,6 @@ for sj in xrange(200):
     del(x)
     del(vx)
     del(dx)
-    del(rhoC18O)
     del(weight)
     del(hist)
     del(thesehists)
