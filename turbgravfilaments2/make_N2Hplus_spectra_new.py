@@ -44,6 +44,25 @@ def _N2Hplus(field, data):
 snap = int(sys.argv[1])
 axis = int(sys.argv[2])
 
+
+"""
+    read in the surface density map. we will use this to normalize the spectra
+    so that they are in approximately physical units
+    
+    convert surface density to integrated line intensity using
+    Alvaro's empirical conversion:
+    
+    N(H2) [cm-2] ~ 7E21 * I(N2H+) [K kms-1]
+"""
+file = 'reduced_'+str(snap).zfill(5)+'/surface_density_C18O2.hdf5'
+f = h5py.File(file, 'r')
+sd = f['surface_density_C18O']
+sd = 10**np.array(sd)  # convert to linear units
+sd /= (2.33 * 1.672621777e-24) # convert to number density
+sd /= 7.0e21
+f.close()
+
+
 if axis == 0:
     los = 'x'
     dlos = 'dx'
@@ -72,11 +91,13 @@ if not os.path.exists(specdir):
 ds = load(infoname)
 
 # add new density fields
-#add_field('C18O', function=_C18O)
-add_field('N2Hplus', function=_N2Hplus)
+add_field('C18O', function=_C18O)
+#add_field('N2Hplus', function=_N2Hplus)
 
-vmax = 2.5e5
-vmin = -2.5e5
+
+
+vmax = 2.5e5 + 7.0e5
+vmin = -2.5e5 - 8.0e5
 # roughly match hacar et al by takin 0.05 km/s bins
 bins = (vmax - vmin) / 1.e5 / 0.05
 binvals = np.arange(vmin, 1.000001*vmax, (vmax - vmin) / bins)
@@ -98,36 +119,34 @@ f.close()
 outres = 2**lmin
 outdres = 1.0 / outres
 
-refinefac = 8
+refinefac = 2**(lmax - lmin)
 inres = outres * refinefac
 indres = 1.0 / inres
 
-# tabulate the error function from -3 to 3 
-#erfx = np.arange(-3,3.0001,10/512.)
-#erfy = special.erf(erfx)
-#def closest_erf_value(xvals, yvals, inval):
-#    return yvals[(np.abs(xvals-inval)).argmin()]
+sigmaC18O = 0.0535 # thermal width of N2Hplus line in km/s
+sigma = sigmaC18O * 1.e5 # convert to cm/s
+erfdenom = np.sqrt(2*sigma**2)
 
-fileN2Hplus = 'reduced_'+str(snap).zfill(5)+'/surface_density_N2Hplus'+str(axis)+'.hdf5'
-print fileN2Hplus
-fN2Hplus = h5py.File(fileN2Hplus, 'r')
-sdN2Hplus = fN2Hplus['surface_density_N2Hplus']
-# convert to linear units, divide by mu * mH
-sdN2Hplus = 10**np.array(sdN2Hplus) / (2.33 * 1.66e-24)
+"""
+    centroid velocities and relative intensities of the N2H+ hyperfine lines
+""" 
+N2HplusCenters = np.array([6.9360, 5.9842, 5.5452, 0.9560, 0.0, -0.6109, -8.0064])
+N2HplusCenters *= 1.e5 # convert to cm/s
+N2HplusIntensities = np.array([0.03704, 0.18519, 0.11111, 0.18519, 0.25926, 0.11111, 0.11111])
 
-for j in xrange(256):
-    print 'n2h+ density sum: ',np.min(sdN2Hplus[j,:]),sdN2Hplus[j,:].sum(),np.max(sdN2Hplus[j,:])
-    #for i in xrange(1024): print i,sdN2Hplus[j,i]
-    if(sdN2Hplus[j,:].sum() == 0):
-        print 'skipping ',j
-        continue
-    outpty = (j + 0.5) * outdres
-    thesehists = []
-    print j, outpty
+for sj in xrange(200):
+    outpty = (sj + 0.5) * outdres
+    thesehistsaccum = np.zeros([outres, len(binmids)])
+    print sj, outpty
     
-    jj = 0
-    for rj in xrange(refinefac):
-        inpty = (j*refinefac + jj + 0.5) * indres
+   # if(sdN2Hplus[sj,:].sum() == 0):
+   #     print 'skipping ',sj
+   #     continue
+    
+    j = 0
+    for ij in xrange(refinefac):
+        thesehists = np.zeros([outres, len(binmids)])
+        inpty = (sj*refinefac + j + 0.5) * indres
         print 'inpty: ',inpty
         # get a slice
         slc = ds.h.slice(sliceax, inpty)
@@ -139,109 +158,80 @@ for j in xrange(256):
             center = [0.5, 0.5, 0.5],   # centered in the box
             height = (1.0, 'unitary'))  # get the whole extent of the box
     
-       # rhoC18O = np.array(frb['C18O'])
-        rhoN2Hplus = np.array(frb['N2Hplus'])
-       # sigmaC18O = 0.0526 # thermal width of C18O line in km/s
-        sigmaN2Hplus = 0.0535 # thermal width of N2Hplus line in km/s
-    
-       # sigma = sigmaC18O * 1.e5 # convert to cm/s
-        sigma = sigmaN2Hplus * 1.e5 # convert to cm/s
-        erfdenom = np.sqrt(2*sigma**2)
+        rhoC18O = np.array(frb['C18O'])
+       # rhoN2Hplus = np.array(frb['N2Hplus'])
     
         x = np.array(frb[los])
         vx = np.array(frb[vlos])
         dx = np.array(frb[dlos])
         mindx = np.min(dx)
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
-        # weight = dx * rhoC18O
-        weight = indres * rhoN2Hplus  # the dx * rho line above isn't necessary for this frb scheme- all cells are the same size, so set to indres
-        # we need to grab rows from the slice differently depending on what axis we're projecting
-        hist = np.zeros(len(binmids))
-        erfvals = np.zeros(len(binvals))
-        if axis == 0:
-            for i in xrange(inres):
-                hist, binedges = np.histogram(
-                    vx[i,:],
-                    range = (vmin, vmax),
-                    bins = binvals,
-                    weights = weight[i,:])
-                thesehists.append(hist)
-        if axis > 0:
-            i = 0
-            for ii in xrange(inres):
-                # for each point along the slice, march along the projecting dimension
-                # and turn each detection into a gaussian. bin this gaussian into the 
-                # velbins.
-                hist[:] = 0
-                k = 0
-                dkmin = 1
-                if(weight[:,i].sum() >= 0):
-                    for ik in xrange(len(vx[:,i])):
-                        peak = vx[k,i]
-                        thisdx = dx[k,i]
-                        dkmin = min(dkmin, thisdx)
-                        if(thisdx == outdres): # this cell is unrefined
-                            kincr = refinefac
-                        elif(thisdx == outdres / 2):
-                            kincr = int(refinefac / 2)
-                        elif(thisdx == outdres / 4):
-                            kincr = int(refinefac / 4)
-                        else:
-                            kincr = 1
-                        # calculate the cumulative distribution of this line at each velocity bin edge
-                        cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[k,i] * kincr
-                        #erfvals[:] = [closest_erf_value(erfx, erfy, vval) for vval in (binvals - peak) / erfdenom]
-                        #cdfs = 0.5 * (1 + erfvals * weight[k,i])
-                        # subtract adjacent values to get the contribution to each bin
-                        hist = hist + np.diff(cdfs)
-                        k += kincr
-                        if(k == len(vx[:,i])):
-                            break
-                if(dkmin == outdres):
-                    iincr = refinefac
-                elif(dkmin == outdres / 2):
-                    iincr = int(refinefac / 2)
-                elif(dkmin == outdres / 4):
-                    iincr = int(refinefac / 4)
-                else:
-                    iincr = 1
-                # this next bit handles binning together a refinefac**2 patch into one output cell
-                # jj==0 handles glomming together the direction perpindicular to the slices
-                # i//refinefac ==0 handles glomming to gether along the slice
-                if(jj == 0 and i%refinefac == 0):    
-                    thesehists.append(hist * iincr)
-                else:
-                    thesehists[i//refinefac] += hist * iincr
-               # print 'incrimenting i by ',iincr
-                i += iincr
-                if(i == inres):
-                    break
-            # figure out if we can skip reading some of these slices
-            if(mindx == outdres): # there are no refined cells in this slice
-                # all the subslices are going to be the same
-                jincr = refinefac
-            elif (mindx == outdres / 2): # there is only one level of refinement in this slice
-                # the first refinefac/2 subsclices are going to be the same
-                jincr = int(refinefac / 2)
-            elif (mindx == outdres / 4): # there are two levels of refinement in this slice
-                # the first refinefac/4 subsclices are going to be the same
-                jincr = int(refinefac / 4)
-            else:
-                jincr = 1
-            if(jj == 0):
-                thesehistsaccum = np.array(thesehists) * jincr
-            else:
-                thesehistsaccum += np.array(thesehists) * jincr
-            #print 'incrimenting j by ',jincr
-            jj += jincr
-            if(jj == refinefac):
-                break;
+        print 'max(rho), min(rho), outdres: ',np.max(rhoC18O),np.min(rhoC18O),outdres
+        weight = rhoC18O  
+
+        i = 0
+        for ii in xrange(inres):
+            # for each point along the slice, march along the projecting dimension
+            # and turn each detection into a gaussian. bin this gaussian into the 
+            # velbins.
+            hist = np.zeros(len(binmids))
+            k = 0
+            dkmin = np.min(dx[:,i])
             
+            if(weight[:,i].sum() > 0):
+             #   print 'whaoooooooo ',i, i//refinefac,weight[:,i].sum()
+                for ik in xrange(len(vx[:,i])):
+                    kincr = 1
+                    if weight[ik,i] > 0:
+                        peak = vx[ik,i]
+                        thisdx = dx[ik,i]
+                        kincr = int(thisdx / indres)
+                        for iline in xrange(7):
+                            hyppeak = peak + N2HplusCenters[iline]
+                            hypintens = weight[ik,i] * N2HplusIntensities[iline]
+                            # calculate the cumulative distribution of this line at each velocity bin edge
+                            cdfs = 0.5 * (1 + special.erf((binvals - hyppeak) / erfdenom)) * hypintens * kincr
+                            # subtract adjacent values to get the contribution to each bin
+                            hist = hist + np.diff(cdfs)
+                      #  print 'hist ',hist
+                    k += kincr
+                    if(k == len(vx[:,i])):
+                        break
+                        
+            iincr = int(dkmin / indres)
+            # this next bit handles binning together a refinefac**2 patch into one output cell
+            # ii//refinefac == 0 handles glomming to gether along the slice
+            thesehists[i//refinefac] += hist * iincr
+           # print 'incrimenting i by ',iincr
+           # print i, i//refinefac,dkmin / indres,inres
+            i += iincr
+            if(i == inres):
+                break
+                
+        jincr = int(mindx / indres)
+        thesehistsaccum += thesehists * jincr
+        #print 'incrementing j by ',jincr
+        j += jincr
+        if(j == refinefac):
+            break
+            
+   # print thesehistsaccum[71]
+   # print thesehistsaccum.shape
+    # normalize to put into K
+    foo = thesehistsaccum.sum(axis = 1)
+    for ifoo in xrange(outres):
+      #  print foo[ifoo], sd[sj, ifoo]
+        if foo[ifoo] == 0 and sd[sj, ifoo] > 0:
+            print 'trouble! ',ifoo, foo[ifoo], sd[sj, ifoo]
+    normalisations = sd[sj, :] / thesehistsaccum.sum(axis = 1)
+    thesehistsaccum *= normalisations[:, np.newaxis]
+    thesehistsaccum = np.nan_to_num(thesehistsaccum)
+                
     # once we have the histograms of mass-weighted velocity along each point for this
     # row, save it to an hdf5 file
-    f = h5py.File(specdir+'spectra_N2Hplus_'+str(j).zfill(4)+'.hdf5', 'w')
-    dset = f.create_dataset('spectraN2Hplus', data = thesehistsaccum, dtype='float32')
-    dset.attrs['slowindex'] = j
+    f = h5py.File(specdir+'spectra_C18O_'+str(sj).zfill(4)+'.hdf5', 'w')
+    dset = f.create_dataset('spectraC18O', data = thesehistsaccum, dtype='float32')
+    dset.attrs['slowindex'] = sj
     dset.attrs[sliceax] = outpty
     f.close()
     
@@ -252,11 +242,9 @@ for j in xrange(256):
     del(x)
     del(vx)
     del(dx)
-    del(rhoN2Hplus)
+    del(rhoC18O)
     del(weight)
     del(hist)
     del(thesehists)
     del(thesehistsaccum)
     gc.collect()
-    
-    

@@ -123,6 +123,10 @@ refinefac = 2**(lmax - lmin)
 inres = outres * refinefac
 indres = 1.0 / inres
 
+sigmaC18O = 0.0526 # thermal width of C18O line in km/s
+sigma = sigmaC18O * 1.e5 # convert to cm/s
+erfdenom = np.sqrt(2*sigma**2)
+
 for sj in xrange(200):
     outpty = (sj + 0.5) * outdres
     thesehistsaccum = np.zeros([outres, len(binmids)])
