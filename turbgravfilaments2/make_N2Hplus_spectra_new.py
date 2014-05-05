@@ -10,9 +10,13 @@ import sys
 import h5py
 import copy
 import shutil
-from astropy.io import ascii
 from os.path import expanduser
-from scipy import special
+try:
+    from scipy import special
+    scipy_available = True
+except ImportError:
+    import math
+    scipy_available = False
 
 # import ramses helper functions and get figure directory
 homedir = expanduser('~')+'/'
@@ -54,12 +58,12 @@ axis = int(sys.argv[2])
     
     N(H2) [cm-2] ~ 7E21 * I(N2H+) [K kms-1]
 """
-file = 'reduced_'+str(snap).zfill(5)+'/surface_density_C18O2.hdf5'
+file = 'reduced_'+str(snap).zfill(5)+'/surface_density_N2Hplus2.hdf5'
 f = h5py.File(file, 'r')
-sd = f['surface_density_C18O']
+sd = f['surface_density_N2Hplus']
 sd = 10**np.array(sd)  # convert to linear units
 sd /= (2.33 * 1.672621777e-24) # convert to number density
-sd /= 7.0e21
+sd /= 7.3e21
 f.close()
 
 
@@ -101,6 +105,8 @@ vmin = -2.5e5 - 8.0e5
 # roughly match hacar et al by takin 0.05 km/s bins
 bins = (vmax - vmin) / 1.e5 / 0.05
 binvals = np.arange(vmin, 1.000001*vmax, (vmax - vmin) / bins)
+if not scipy_available:
+    erfvals = np.arange(vmin, 1.000001*vmax, (vmax - vmin) / bins)
 binmids = 0.5 * (np.roll(binvals, -1) + binvals)
 binmids = binmids[:len(binmids) - 1]
 # get a version of the bins in km/s instead of cgs
@@ -116,6 +122,7 @@ f.close()
     outres: the output resolution.
     inres: the resolution we sample the grid at.
 """
+lmin = max(10, lmin)
 outres = 2**lmin
 outdres = 1.0 / outres
 
@@ -134,7 +141,7 @@ N2HplusCenters = np.array([6.9360, 5.9842, 5.5452, 0.9560, 0.0, -0.6109, -8.0064
 N2HplusCenters *= 1.e5 # convert to cm/s
 N2HplusIntensities = np.array([0.03704, 0.18519, 0.11111, 0.18519, 0.25926, 0.11111, 0.11111])
 
-for sj in xrange(200):
+for sj in xrange(64):
     outpty = (sj + 0.5) * outdres
     thesehistsaccum = np.zeros([outres, len(binmids)])
     print sj, outpty
@@ -158,11 +165,16 @@ for sj in xrange(200):
             center = [0.5, 0.5, 0.5],   # centered in the box
             height = (1.0, 'unitary'))  # get the whole extent of the box
     
-        weight = np.array(frb['N2Hplus'])
-    
-        x = np.array(frb[los])
-        vx = np.array(frb[vlos])
-        dx = np.array(frb[dlos])
+        weight = np.array(frb['N2Hplus'], dtype=np.float32)
+        del(frb['N2Hplus'])
+        gc.collect()
+        vx = np.array(frb[vlos], dtype=np.float32)
+        del(frb[vlos])
+        gc.collect()
+        dx = np.array(frb[dlos] / indres, dtype=np.int32)
+        del(frb[dlos])
+        gc.collect()
+
         mindx = np.min(dx)
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
         print 'max(rho), min(rho), outdres: ',np.max(weight),np.min(weight),outdres
@@ -175,6 +187,7 @@ for sj in xrange(200):
             hist = np.zeros(len(binmids))
             k = 0
             dkmin = np.min(dx[:,i])
+            dkmin = min(dkmin, outdres) # out outres is higher than min res, this is necessary
             
             if(weight[:,i].sum() > 0):
              #   print 'whaoooooooo ',i, i//refinefac,weight[:,i].sum()
@@ -183,36 +196,53 @@ for sj in xrange(200):
                     if weight[ik,i] > 0:
                         peak = vx[ik,i]
                         thisdx = dx[ik,i]
-                        kincr = int(thisdx / indres)
+                        #kincr = int(thisdx / indres)
+                        kincr = thisdx
                         for iline in xrange(7):
                             hyppeak = peak + N2HplusCenters[iline]
                             hypintens = weight[ik,i] * N2HplusIntensities[iline]
                             # calculate the cumulative distribution of this line at each velocity bin edge
-                            cdfs = 0.5 * (1 + special.erf((binvals - hyppeak) / erfdenom)) * hypintens * kincr
+                            if scipy_available:
+                                cdfs = 0.5 * (1 + special.erf((binvals - hyppeak) / erfdenom)) * hypintens * kincr
+                            else:
+                                for ev in xrange(len(erfvals)):
+                                    erfvals[ev] = math.erf((binvals[ev] - hyppeak) / erfdenom)
+                                cdfs = 0.5 * (1 + erfvals) * hypintens * kincr
                             # subtract adjacent values to get the contribution to each bin
                             hist = hist + np.diff(cdfs)
                       #  print 'hist ',hist
                     k += kincr
                     if(k == len(vx[:,i])):
                         break
-                        
+                del(cdfs)    
             iincr = int(dkmin / indres)
             # this next bit handles binning together a refinefac**2 patch into one output cell
             # ii//refinefac == 0 handles glomming to gether along the slice
             thesehists[i//refinefac] += hist * iincr
            # print 'incrimenting i by ',iincr
            # print i, i//refinefac,dkmin / indres,inres
+            del(hist)
+            del(dkmin)
             i += iincr
+            if(i % refinefac) == 0:
+                gc.collect()
             if(i == inres):
                 break
                 
-        jincr = int(mindx / indres)
+        #jincr = int(mindx / indres)
+        jincr = mindx
         thesehistsaccum += thesehists * jincr
         #print 'incrementing j by ',jincr
         j += jincr
         if(j == refinefac):
             break
-
+        del(vx)
+        del(dx)
+        del(weight)
+        del(slc)
+        del(frb)
+        gc.collect()
+        
     # normalize to put into K
     integratedI = thesehistsaccum.sum(axis = 1)
     for m in xrange(outres):
@@ -230,15 +260,8 @@ for sj in xrange(200):
     dset.attrs[sliceax] = outpty
     f.close()
     
-    del(slc)
-    del(frb)
     del(f)
     del(dset)
-    del(x)
-    del(vx)
-    del(dx)
-    del(weight)
-    del(hist)
     del(thesehists)
     del(thesehistsaccum)
     gc.collect()

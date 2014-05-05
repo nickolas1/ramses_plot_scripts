@@ -10,9 +10,13 @@ import sys
 import h5py
 import copy
 import shutil
-from astropy.io import ascii
 from os.path import expanduser
-from scipy import special
+try:
+    from scipy import special
+    scipy_available = True
+except ImportError:
+    import math
+    scipy_available = False
 
 # import ramses helper functions and get figure directory
 homedir = expanduser('~')+'/'
@@ -55,7 +59,7 @@ axis = int(sys.argv[2])
     N(H2)C18O = 2.42e14 cm^-2 [H2]/[C18O] * exp(5.27/Tex)/(exp(5.27/Tex)-1) IC18O K km/s
     [H2]/[C18O] = 2.94e6
 """
-file = 'reduced_'+str(snap).zfill(5)+'/surface_density_C18O2.hdf5'
+file = 'reduced_'+str(snap).zfill(5)+'/surface_density_C18O'+str(axis)+'.hdf5'
 f = h5py.File(file, 'r')
 sd = f['surface_density_C18O']
 sd = 10**np.array(sd)  # convert to linear units
@@ -101,6 +105,8 @@ vmin = -2.5e5
 # roughly match hacar et al by takin 0.05 km/s bins
 bins = (vmax - vmin) / 1.e5 / 0.05
 binvals = np.arange(vmin, 1.000001*vmax, (vmax - vmin) / bins)
+if not scipy_available:
+    erfvals = np.arange(vmin, 1.000001*vmax, (vmax - vmin) / bins)
 binmids = 0.5 * (np.roll(binvals, -1) + binvals)
 binmids = binmids[:len(binmids) - 1]
 # get a version of the bins in km/s instead of cgs
@@ -116,6 +122,7 @@ f.close()
     outres: the output resolution.
     inres: the resolution we sample the grid at.
 """
+lmin = max(10, lmin)
 outres = 2**lmin
 outdres = 1.0 / outres
 
@@ -127,7 +134,8 @@ sigmaC18O = 0.0526 # thermal width of C18O line in km/s
 sigma = sigmaC18O * 1.e5 # convert to cm/s
 erfdenom = np.sqrt(2*sigma**2)
 
-for sj in xrange(200):
+
+for sj in xrange(outres):
     outpty = (sj + 0.5) * outdres
     thesehistsaccum = np.zeros([outres, len(binmids)])
     print sj, outpty
@@ -151,11 +159,26 @@ for sj in xrange(200):
             center = [0.5, 0.5, 0.5],   # centered in the box
             height = (1.0, 'unitary'))  # get the whole extent of the box
     
-        weight = np.array(frb['C18O'])
+        #weight = np.array(frb['C18O'])
     
-        x = np.array(frb[los])
-        vx = np.array(frb[vlos])
-        dx = np.array(frb[dlos])
+        #x = np.array(frb[los], dtype=np.float32)
+        #vx = np.array(frb[vlos], dtype=np.float32)
+        #dx = np.array(frb[dlos], dtype=np.float32)
+        #del(slc)
+        #del(frb)
+        #gc.collect()
+        
+        weight = np.array(frb['C18O'], dtype=np.float32)
+        del(frb['C18O'])
+        gc.collect()
+        vx = np.array(frb[vlos], dtype=np.float32)
+        del(frb[vlos])
+        gc.collect()
+        dx = np.array(frb[dlos] / indres, dtype=np.int32)
+        del(frb[dlos])
+        gc.collect()
+        
+        
         mindx = np.min(dx)
         print 'max(dx), min(dx), outdres: ',np.max(dx),np.min(dx),outdres
         print 'max(rho), min(rho), outdres: ',np.max(weight),np.min(weight),outdres  
@@ -168,6 +191,7 @@ for sj in xrange(200):
             hist = np.zeros(len(binmids))
             k = 0
             dkmin = np.min(dx[:,i])
+            dkmin = min(dkmin, refinefac) # out outres is higher than min res, this is necessary
             
             if(weight[:,i].sum() > 0):
              #   print 'whaoooooooo ',i, i//refinefac,weight[:,i].sum()
@@ -176,40 +200,56 @@ for sj in xrange(200):
                     if weight[ik,i] > 0:
                         peak = vx[ik,i]
                         thisdx = dx[ik,i]
-                        kincr = int(thisdx / indres)
+                        #kincr = int(thisdx / indres)
+                        kincr = thisdx
                         # calculate the cumulative distribution of this line at each velocity bin edge
-                        cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[ik,i] * kincr
+                        if scipy_available:
+                            cdfs = 0.5 * (1 + special.erf((binvals - peak) / erfdenom)) * weight[ik,i] * kincr
+                        else:
+                            for ev in xrange(len(erfvals)):
+                                erfvals[ev] = math.erf((binvals[ev] - peak) / erfdenom)
+                            cdfs = 0.5 * (1 + erfvals) * weight[ik,i] * kincr
                         # subtract adjacent values to get the contribution to each bin
                         hist = hist + np.diff(cdfs)
                       #  print 'hist ',hist
                     k += kincr
                     if(k == len(vx[:,i])):
                         break
-                        
-            iincr = int(dkmin / indres)
+                del(cdfs)   
+            iincr = dkmin
             # this next bit handles binning together a refinefac**2 patch into one output cell
             # ii//refinefac == 0 handles glomming to gether along the slice
             thesehists[i//refinefac] += hist * iincr
            # print 'incrimenting i by ',iincr
            # print i, i//refinefac,dkmin / indres,inres
-            i += iincr
+            del(hist)
+            del(dkmin)
+            i += iincr      
+            if(i % refinefac) == 0:
+                gc.collect()     
             if(i == inres):
                 break
                 
-        jincr = int(mindx / indres)
+        #jincr = int(mindx / indres)
+        jincr = mindx
         thesehistsaccum += thesehists * jincr
         #print 'incrementing j by ',jincr
         j += jincr
         if(j == refinefac):
             break
-
+        del(vx)
+        del(dx)
+        del(weight)
+        del(slc)
+        del(frb)
+        gc.collect()
+        
     # normalize to put into K
-    foo = thesehistsaccum.sum(axis = 1)
-    for ifoo in xrange(outres):
-      #  print foo[ifoo], sd[sj, ifoo]
-        if foo[ifoo] == 0 and sd[sj, ifoo] > 0:
-            print 'trouble! ',ifoo, foo[ifoo], sd[sj, ifoo]
-    normalisations = sd[sj, :] / thesehistsaccum.sum(axis = 1)
+    integratedI = thesehistsaccum.sum(axis = 1)
+    for m in xrange(outres):
+        if integratedI[m] == 0 and sd[sj, m] > 0:
+            print 'trouble! ',m, integratedI[m], sd[sj, m]
+    normalisations = sd[sj, :] / integratedI
     thesehistsaccum *= normalisations[:, np.newaxis]
     thesehistsaccum = np.nan_to_num(thesehistsaccum)
                 
@@ -221,15 +261,8 @@ for sj in xrange(200):
     dset.attrs[sliceax] = outpty
     f.close()
     
-    del(slc)
-    del(frb)
     del(f)
     del(dset)
-    del(x)
-    del(vx)
-    del(dx)
-    del(weight)
-    del(hist)
     del(thesehists)
     del(thesehistsaccum)
     gc.collect()
