@@ -59,7 +59,7 @@ outcube = np.zeros([inres, inres, len(vels)], dtype=np.float32)
 
 binwidth = 0.05
 
-filelist = glob.glob(fileprefix+'posvel_'+str(axis)+'/spectra_N2Hplus_*.hdf5')
+filelist = glob.glob(fileprefix+'posvel_'+str(axis)+'/spectra_C18O_*.hdf5')
 print filelist[0]
 
 totnonzero = 0
