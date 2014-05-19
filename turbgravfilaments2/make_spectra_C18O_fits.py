@@ -65,15 +65,15 @@ print filelist[0]
 totnonzero = 0
 specfile = filelist[0]
 f = h5py.File(specfile)
-specs = f['spectraN2Hplus']
+specs = f['spectraC18O']
 zerospec = np.zeros(specs.shape)
 f.close()
 
 for inj in xrange(inres):
-    specfile = fileprefix+'posvel_'+str(axis)+'/spectra_N2Hplus_'+str(inj).zfill(4)+'.hdf5'
+    specfile = fileprefix+'posvel_'+str(axis)+'/spectra_C18O_'+str(inj).zfill(4)+'.hdf5'
     if os.path.isfile(specfile):
         f = h5py.File(specfile)
-        specs = np.array(f['spectraN2Hplus']) / binwidth
+        specs = np.array(f['spectraC18O']) / binwidth
         print specfile
     else:
         specs = zerospec
@@ -83,7 +83,9 @@ for inj in xrange(inres):
     
 hdu = fits.PrimaryHDU(outcube)
 hdulist = fits.HDUList([hdu])
-hdulist.writeto('spectra.N2H+.'+timestr+'.fits')
+hdulist.writeto('spectra.C18O.'+timestr+'.fits')
+
+
 
     
 
