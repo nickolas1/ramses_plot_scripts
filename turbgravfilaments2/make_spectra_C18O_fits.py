@@ -38,7 +38,7 @@ timestr = str(int(round(time_kyr))).zfill(4)
 print timestr
 
 
-f = h5py.File(fileprefix+'posvel_'+str(axis)+'/spectrumvelsN2Hplus.hdf5')
+f = h5py.File(fileprefix+'posvel_'+str(axis)+'/spectrumvelsC18O.hdf5')
 vels = np.array(f['binmidskms'])
 f.close()
 
