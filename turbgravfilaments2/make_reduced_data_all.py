@@ -38,10 +38,17 @@ MakeDensityPDF = False
 
 for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
     infoname = 'output_'+str(snap).zfill(5)+'/info_'+str(snap).zfill(5)+'.txt'
+    
+    # get time string
+    (time, unit_t) = get_time(infofile)
+    time_kyr = time * unit_t / (3.15569e7 * 1000)
+    timestr = str(int(round(time_kyr))).zfill(4)
+    
     sinkname = 'output_'+str(snap).zfill(5)+'/sink_'+str(snap).zfill(5)+'.out'
     sinkname2 = 'output_'+str(snap).zfill(5)+'/sink_'+str(snap).zfill(5)+'.csv'
     
     fileprefix = 'reduced_'+str(snap).zfill(5)+'/'
+    sinknametime = fileprefix+'/sink.'+timestr+'.csv'
 
     # copy info files to the reduced directory
     if not os.path.exists(fileprefix):
@@ -52,6 +59,8 @@ for snap in range(int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3])):
             shutil.copy(sinkname, fileprefix)
         if os.path.exists(sinkname2):
             shutil.copy(sinkname2, fileprefix)    
+            shutil.copy(sinkname2, sinknametime)
+    
     
     # figure out resolution and box size
     (lmin, lmax) = get_level_min_max(infoname)
